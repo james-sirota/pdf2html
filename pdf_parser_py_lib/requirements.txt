@@ -1,0 +1,16 @@
+PyMuPDF
+fastapi
+uvicorn[standard]
+python-multipart
+typing-extensions # For Result type
+pytest # For testing
+requests # For testing FastAPI endpoints
+Pillow # For creating dummy PDF for tests
+reportlab # For creating text-based dummy PDFs for tests
+pytesseract # For OCR
+camelot-py[cv] # For table extraction, includes opencv-python-headless
+pandas # For DataFrame manipulation, a Camelot dependency
+lxml # often needed by pandas for to_html, or by camelot itself
+tabulate # for better HTML table formatting if default is too basic, or for other table formats. pandas to_html is usually fine.
+paddlepaddle # For PaddleOCR - CPU version preferred
+paddleocr # For OCR with PaddleOCR
