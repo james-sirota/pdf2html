@@ -14,3 +14,4 @@ lxml # often needed by pandas for to_html, or by camelot itself
 tabulate # for better HTML table formatting if default is too basic, or for other table formats. pandas to_html is usually fine.
 paddlepaddle # For PaddleOCR - CPU version preferred
 paddleocr # For OCR with PaddleOCR
+Jinja2 # For FastAPI templating

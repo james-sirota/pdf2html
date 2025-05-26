@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Parser UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>PDF Parser</h1>
+    </header>
+
+    <div class="upload-section">
+        <h2>Upload PDF</h2>
+        <form id="uploadForm" enctype="multipart/form-data"> 
+            <input type="file" name="file" id="pdfUpload" accept=".pdf" required>
+            <button type="button" id="uploadButton">Upload and Parse PDF</button>
+        </form>
+        <div id="statusMessage" style="margin-top: 10px; font-weight: bold; padding: 5px;">
+            <!-- General status, including job-level errors, will appear here -->
+        </div>
+        <div id="jobIdDisplay" style="margin-top: 5px;">
+            <!-- Job ID will appear here -->
+        </div>
+        <div id="progressDisplay" style="margin-top: 5px; font-style: italic;">
+            <!-- Parsing progress messages will appear here -->
+        </div>
+    </div>
+
+    <main>
+        <div class="panel-container">
+            <div class="panel left-panel">
+                <h2>PDF View</h2>
+                <div id="pdfViewArea"> 
+                    <canvas id="pdfCanvas"></canvas>
+                </div>
+                <div id="pdfViewPlaceholder" class="placeholder" style="display: none;"> 
+                    PDF content will be displayed here.
+                </div>
+            </div>
+
+            <div class="panel right-panel">
+                <h2>Extracted HTML Content</h2>
+                <div id="htmlViewPlaceholder" class="placeholder">
+                    Extracted HTML content for the selected page will appear here.
+                </div>
+                <div id="htmlContentView" style="width:100%; height:95%; overflow-y: auto; display:none;">
+                    <!-- HTML content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <div class="page-navigation">
+        <button id="prevPage" disabled>&lt; Previous Page</button>
+        <span id="pageIndicator">Page N/A of N/A</span>
+        <button id="nextPage" disabled>Next Page &gt;</button>
+        <button id="showMetadataButton" style="margin-left: 20px;" disabled>Show Page Raw Data</button>
+    </div>
+
+    <div id="metadataDisplayArea" style="padding: 10px;">
+        <h3>Page Raw Data / Metadata:</h3>
+        <div id="metadataDisplay" style="display:none; white-space: pre-wrap; background: #f0f0f0; border: 1px solid #ccc; padding: 10px; margin-top: 5px; max-height: 300px; overflow-y: auto;">
+            <!-- Raw JSON metadata will appear here -->
+        </div>
+    </div>
+
+
+    <footer>
+        <p>&copy; 2024 PDF Parser Application</p>
+    </footer>
+
+    <script src="{{ url_for('static', path='pdfjs/build/pdf.min.js') }}"></script>
+    <script src="{{ url_for('static', path='/script.js') }}"></script>
+</body>
+</html>
