@@ -28,9 +28,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. PaddleOCR Model Handling
+# 5. Tesseract Language Data (already installed tesseract-ocr-eng)
+
+# 6. Application Code
+WORKDIR /app
+
+# Copy requirements first to leverage Docker cache
+# This also needs to happen before trying to use any packages from it.
+COPY requirements.txt requirements.txt
+
+# Install Python dependencies
+# Using --no-cache-dir to reduce image size
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4. PaddleOCR Model Handling (Moved after pip install)
 # Create a directory for models if a custom one were used (not strictly needed for default path)
-# RUN mkdir -p /opt/paddleocr_models 
+# RUN mkdir -p /opt/paddleocr_models
 # Create a temporary script to download models
 RUN echo "from paddleocr import PaddleOCR; print('Downloading PaddleOCR models...'); PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=True); print('PaddleOCR models downloaded.')" > /tmp/download_paddle_models.py
 # Run the script to download models. This will place them in /root/.paddleocr/
@@ -38,18 +51,6 @@ RUN echo "from paddleocr import PaddleOCR; print('Downloading PaddleOCR models..
 RUN python /tmp/download_paddle_models.py \
     && rm /tmp/download_paddle_models.py
 # The models will be in /root/.paddleocr/ and included in the image.
-
-# 5. Tesseract Language Data (already installed tesseract-ocr-eng)
-
-# 6. Application Code
-WORKDIR /app
-
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt requirements.txt
-
-# Install Python dependencies
-# Using --no-cache-dir to reduce image size
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 # This assumes the Dockerfile is in the root of pdf_parser_py_lib
