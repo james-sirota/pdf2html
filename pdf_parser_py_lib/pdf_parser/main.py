@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import uuid
 import os
+import re # Added for sanitization
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, Path as FastApiPath, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse # Added FileResponse
@@ -68,17 +69,45 @@ async def process_pdf_job(job_id: str, pdf_path_for_job: str):
             if PADDLEOCR_AVAILABLE:
                 images_extraction_result = extract_images_from_page(pdf_path_for_job, page_num)
                 if isinstance(images_extraction_result, Ok):
-                    for img_info in images_extraction_result.value:
-                        img_bytes = img_info.pop("image_bytes", None); item_resp = {**img_info}
-                        if img_info.get("error"): pass 
-                        elif img_bytes:
-                            ocr_meta = get_image_metadata_with_paddleocr(img_bytes)
-                            if isinstance(ocr_meta, Ok): item_resp["metadata"] = ocr_meta.value
-                            else: item_resp["metadata_error"] = ocr_meta.error
-                        else: item_resp["metadata_error"] = "Image bytes missing."
+                    for img_info_original in images_extraction_result.value: # Renamed for clarity
+                        # Create item_resp, starting with all data from img_info_original
+                        item_resp = {**img_info_original}
+
+                        # Rename "format" to "image_format" for consistency with html_generator
+                        if "format" in item_resp:
+                            item_resp["image_format"] = item_resp.pop("format")
+
+                        # Image bytes for OCR are now in item_resp["image_bytes"] if present
+                        img_bytes_for_ocr = item_resp.get("image_bytes")
+
+                        if item_resp.get("error"):
+                            # If there was an error extracting the image (e.g., from extract_images_from_page),
+                            # image_bytes might be None or missing. No further processing needed.
+                            pass
+                        elif img_bytes_for_ocr: # Check if image_bytes exist and are not None
+                            ocr_meta_result = get_image_metadata_with_paddleocr(img_bytes_for_ocr)
+                            if isinstance(ocr_meta_result, Ok):
+                                item_resp["metadata"] = ocr_meta_result.value
+                            else:
+                                item_resp["metadata_error"] = ocr_meta_result.error
+                        else:
+                            # This case handles if image_bytes were None or not present,
+                            # and no "error" was set by the extractor.
+                            item_resp["metadata_error"] = "Image bytes missing or invalid for OCR processing."
                         current_page_data["images_metadata"].append(item_resp)
-                else: current_page_data["errors"].append(f"Image series extraction failed: {images_extraction_result.error}")
-            else: current_page_data["images_metadata"].append({"metadata_note": "PaddleOCR not available."})
+                else: # Error in extract_images_from_page itself
+                    current_page_data["errors"].append(f"Image series extraction failed: {images_extraction_result.error}")
+            else:
+                # If PaddleOCR is not available, still try to get image metadata if possible (without OCR)
+                # For now, we just note that PaddleOCR is unavailable.
+                # If extract_images_from_page was called, its results (even without OCR) would be processed above.
+                # This path implies a broader "images cannot be processed due to no OCR engine"
+                # This might need refinement based on whether extract_images_from_page runs if PADDLEOCR_AVAILABLE is false
+                # Assuming extract_images_from_page itself might depend on this flag or similar checks internally for some features.
+                # For now, if Paddle isn't available, we're not adding image placeholders that html_generator would try to fill.
+                # Let's ensure image_metadata list exists, even if empty or with a note.
+                if not current_page_data["images_metadata"]: # Avoid duplicating notes if already populated
+                    current_page_data["images_metadata"].append({"metadata_note": "Image processing (including OCR) skipped: PaddleOCR not available."})
             # SVG
             svg_result = extract_svg_from_page(pdf_path_for_job, page_num)
             if isinstance(svg_result, Ok): current_page_data["svg_graphics"] = svg_result.value
@@ -111,8 +140,38 @@ async def api_parse_pdf(background_tasks: BackgroundTasks, file: UploadFile = Fi
     job_id = str(uuid.uuid4())
     job_specific_dir = PDF_JOB_STORAGE_DIR / job_id
     job_specific_dir.mkdir(parents=True, exist_ok=True)
-    # Sanitize filename before saving to prevent directory traversal or other issues
-    safe_filename = Path(file.filename).name # Basic sanitization
+
+    original_filename_for_job_metadata = file.filename # Store the original filename for metadata
+
+    # --- Robust Filename Sanitization ---
+    basename = Path(file.filename).name
+
+    # Replace characters not in the allowed set (alphanumeric, dot, underscore, hyphen) with a single underscore.
+    sanitized_basename = re.sub(r'[^a-zA-Z0-9._-]', '_', basename)
+    # Collapse multiple consecutive underscores into a single one.
+    sanitized_basename = re.sub(r'_+', '_', sanitized_basename)
+    # Remove leading/trailing underscores or dots.
+    sanitized_basename = sanitized_basename.strip('._')
+
+    # Ensure the filename is not empty after sanitization.
+    if not sanitized_basename:
+        sanitized_basename = "default_document"
+
+    # Ensure it ends with .pdf
+    name_part, ext_part = os.path.splitext(sanitized_basename)
+    if not ext_part.lower() == ".pdf":
+        # If existing extension is not .pdf (or no extension), set/reset to .pdf
+        # This handles cases like "file.txt" -> "file_.pdf" or "file" -> "file.pdf"
+        # or even "file.tar.gz" -> "file_tar_gz.pdf"
+        sanitized_basename = name_part + ".pdf"
+    else:
+        # If it already ends with .pdf (case-insensitive), ensure canonical .pdf
+        sanitized_basename = name_part + ".pdf"
+
+
+    safe_filename = sanitized_basename
+    # --- End of Sanitization ---
+
     pdf_path_for_job = job_specific_dir / safe_filename
 
     try:
@@ -122,7 +181,8 @@ async def api_parse_pdf(background_tasks: BackgroundTasks, file: UploadFile = Fi
         if hasattr(file, 'file') and hasattr(file.file, 'close'): file.file.close()
     
     jobs[job_id] = {"status": "pending", "pdf_path": str(pdf_path_for_job), 
-                    "original_filename": safe_filename, "num_pages": 0, "page_data": {}, "error_details": None}
+                    "original_filename": original_filename_for_job_metadata, # Use the true original filename here
+                    "num_pages": 0, "page_data": {}, "error_details": None}
     background_tasks.add_task(process_pdf_job, job_id, str(pdf_path_for_job))
     return JSONResponse(content={"job_id": job_id, "message": "PDF parsing job initiated."})
 

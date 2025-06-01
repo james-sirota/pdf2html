@@ -1,5 +1,6 @@
 from typing import Dict, List, Any
 import html
+import base64
 
 def generate_page_html(page_data: Dict[str, Any]) -> str:
     """
@@ -74,8 +75,20 @@ def generate_page_html(page_data: Dict[str, Any]) -> str:
             if img_item.get("error"): # Error during image extraction itself
                 html_parts.append(f"<p style='color:red;'>Error extracting this image: {html.escape(img_item['error'])}</p>")
             else:
-                # Placeholder for the image itself
-                html_parts.append(f"<div style='border:1px solid black; padding:10px; margin:5px; background-color:#f0f0f0;'>[Image Placeholder for {img_id_text}]</div>")
+                # Attempt to embed the image
+                image_bytes = img_item.get("image_bytes")
+                image_format = img_item.get("image_format")
+
+                if image_bytes and image_format:
+                    try:
+                        encoded_bytes = base64.b64encode(image_bytes).decode('utf-8')
+                        img_tag = f"<img src='data:image/{image_format};base64,{encoded_bytes}' alt='{html.escape(img_id_text)}' style='max-width:100%; height:auto;'/>"
+                        html_parts.append(img_tag)
+                    except Exception as e:
+                        html_parts.append(f"<div style='border:1px solid red; padding:10px; margin:5px; background-color:#ffe0e0;'>[Error encoding image {img_id_text}: {html.escape(str(e))}]</div>")
+                else:
+                    # Fallback to placeholder if image_bytes or image_format is missing
+                    html_parts.append(f"<div style='border:1px solid black; padding:10px; margin:5px; background-color:#f0f0f0;'>[Image Placeholder for {img_id_text} - data not available]</div>")
                 
                 ocr_text_display = "No OCR data."
                 metadata_error = img_item.get("metadata_error") # Error from PaddleOCR step
